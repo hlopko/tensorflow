@@ -203,7 +203,7 @@ def _sycl_autoconf_imp(repository_ctx):
 
             _tpl(
                 repository_ctx,
-                "crosstool:CROSSTOOL",
+                "crosstool:cc_toolchain_config.bzl",
                 {
                     "%{sycl_include_dir}": computecpp_root,
                     "%{sycl_impl}": "computecpp",
@@ -233,7 +233,7 @@ def _sycl_autoconf_imp(repository_ctx):
 
             _tpl(
                 repository_ctx,
-                "crosstool:CROSSTOOL",
+                "crosstool:cc_toolchain_config.bzl",
                 {
                     "%{sycl_include_dir}": trisycl_include_dir,
                     "%{sycl_impl}": "trisycl",

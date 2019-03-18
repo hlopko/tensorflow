@@ -1,3 +1,5 @@
+load(":cc_toolchain_config.bzl", "cc_toolchain_config")
+
 licenses(["notice"])  # Apache 2.0
 
 package(default_visibility = ["//visibility:public"])
@@ -21,6 +23,13 @@ cc_toolchain(
     static_runtime_libs = [":empty"],
     strip_files = ":empty",
     supports_param_files = 1,
+    toolchain_config = ":local",
+)
+
+cc_toolchain_config(
+    name = "local",
+    cpu = "local",
+    compiler = "compiler",
 )
 
 filegroup(
