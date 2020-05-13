@@ -438,7 +438,9 @@ def _impl(ctx):
                     ),
                     flag_set(
                         actions = all_cpp_compile_actions,
-                        flag_groups = [flag_group(flags = ["-std=c++11"])],
+                        flag_groups = [
+                            flag_group(flags = ["-fexperimental-new-pass-manager"]),
+                        ] if ctx.attr.compiler == "clang" else [],
                     ),
                     flag_set(
                         actions = all_compile_actions,
@@ -813,10 +815,10 @@ def _impl(ctx):
                                 flags = ["%{user_compile_flags}"],
                                 iterate_over = "user_compile_flags",
                                 expand_if_available = "user_compile_flags",
-                            )
-                            ] + ([
-                                flag_group(flags = ctx.attr.host_unfiltered_compile_flags)
-                            ] if ctx.attr.host_unfiltered_compile_flags else []),
+                            ),
+                        ] + ([
+                            flag_group(flags = ctx.attr.host_unfiltered_compile_flags),
+                        ] if ctx.attr.host_unfiltered_compile_flags else []),
                     ),
                     flag_set(
                         actions = [ACTION_NAMES.assemble],
@@ -1147,7 +1149,7 @@ cc_toolchain_config = rule(
         "msvc_lib_path": attr.string(default = "msvc_not_used"),
         "msvc_link_path": attr.string(default = "msvc_not_used"),
         "msvc_ml_path": attr.string(default = "msvc_not_used"),
-        "compiler": attr.string(values = ["clang", "msvc", "unknown"], default="unknown"),
+        "compiler": attr.string(values = ["clang", "msvc", "unknown"], default = "unknown"),
     },
     provides = [CcToolchainConfigInfo],
     executable = True,
