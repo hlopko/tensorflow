@@ -593,7 +593,7 @@ def _features(cpu, compiler, ctx):
             feature(name = "pic", enabled = True),
             feature(name = "supports_pic", enabled = True),
         ]
-    else:
+    elif cpu == "x64_windows":
         return [
             feature(name = "no_legacy_features"),
             feature(
@@ -950,6 +950,8 @@ def _features(cpu, compiler, ctx):
                 enabled = True,
             ),
         ]
+    else:
+        fail("Unreachable")
 
 def _impl(ctx):
     cpu = ctx.attr.cpu
@@ -968,11 +970,6 @@ def _impl(ctx):
             linker_path = ctx.attr.host_compiler_path,
             strip_path = ctx.attr.host_compiler_prefix + "/strip",
         )
-        features = _features(
-            cpu,
-            compiler,
-            ctx,
-        )
     elif (cpu == "local"):
         toolchain_identifier = "local_linux"
         target_cpu = "local"
@@ -985,11 +982,6 @@ def _impl(ctx):
             archiver_path = ctx.attr.host_compiler_prefix + "/ar",
             linker_path = ctx.attr.host_compiler_path,
             strip_path = ctx.attr.host_compiler_prefix + "/strip",
-        )
-        features = _features(
-            cpu,
-            compiler,
-            ctx,
         )
     elif (cpu == "x64_windows"):
         toolchain_identifier = "local_windows"
@@ -1004,11 +996,6 @@ def _impl(ctx):
             linker_path = ctx.attr.msvc_link_path,
             strip_path = "fake_tool_strip_not_supported",
         )
-        features = _features(
-            cpu,
-            compiler,
-            ctx,
-        )
     else:
         fail("Unreachable")
 
@@ -1017,7 +1004,7 @@ def _impl(ctx):
     return [
         cc_common.create_cc_toolchain_config_info(
             ctx = ctx,
-            features = features,
+            features = _features(cpu, compiler, ctx),
             action_configs = action_configs,
             artifact_name_patterns = [],
             cxx_builtin_include_directories = ctx.attr.builtin_include_directories,
