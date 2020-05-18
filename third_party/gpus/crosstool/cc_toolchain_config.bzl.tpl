@@ -16,232 +16,14 @@ load(
 )
 load("@bazel_tools//tools/build_defs/cc:action_names.bzl", "ACTION_NAMES")
 
-def libraries_to_link_group(flavour):
-    if flavour == "linux":
-        return flag_group(
-            iterate_over = "libraries_to_link",
-            flag_groups = [
-                flag_group(
-                    flags = ["-Wl,--start-lib"],
-                    expand_if_equal = variable_with_value(
-                        name = "libraries_to_link.type",
-                        value = "object_file_group",
-                    ),
-                ),
-                flag_group(
-                    flags = ["-Wl,-whole-archive"],
-                    expand_if_true =
-                        "libraries_to_link.is_whole_archive",
-                ),
-                flag_group(
-                    flags = ["%{libraries_to_link.object_files}"],
-                    iterate_over = "libraries_to_link.object_files",
-                    expand_if_equal = variable_with_value(
-                        name = "libraries_to_link.type",
-                        value = "object_file_group",
-                    ),
-                ),
-                flag_group(
-                    flags = ["%{libraries_to_link.name}"],
-                    expand_if_equal = variable_with_value(
-                        name = "libraries_to_link.type",
-                        value = "object_file",
-                    ),
-                ),
-                flag_group(
-                    flags = ["%{libraries_to_link.name}"],
-                    expand_if_equal = variable_with_value(
-                        name = "libraries_to_link.type",
-                        value = "interface_library",
-                    ),
-                ),
-                flag_group(
-                    flags = ["%{libraries_to_link.name}"],
-                    expand_if_equal = variable_with_value(
-                        name = "libraries_to_link.type",
-                        value = "static_library",
-                    ),
-                ),
-                flag_group(
-                    flags = ["-l%{libraries_to_link.name}"],
-                    expand_if_equal = variable_with_value(
-                        name = "libraries_to_link.type",
-                        value = "dynamic_library",
-                    ),
-                ),
-                flag_group(
-                    flags = ["-l:%{libraries_to_link.name}"],
-                    expand_if_equal = variable_with_value(
-                        name = "libraries_to_link.type",
-                        value = "versioned_dynamic_library",
-                    ),
-                ),
-                flag_group(
-                    flags = ["-Wl,-no-whole-archive"],
-                    expand_if_true = "libraries_to_link.is_whole_archive",
-                ),
-                flag_group(
-                    flags = ["-Wl,--end-lib"],
-                    expand_if_equal = variable_with_value(
-                        name = "libraries_to_link.type",
-                        value = "object_file_group",
-                    ),
-                ),
-            ],
-            expand_if_available = "libraries_to_link",
-        )
-    elif flavour == "darwin":
-        return flag_group(
-            iterate_over = "libraries_to_link",
-            flag_groups = [
-                flag_group(
-                    iterate_over = "libraries_to_link.object_files",
-                    flag_groups = [
-                        flag_group(
-                            flags = ["%{libraries_to_link.object_files}"],
-                            expand_if_false = "libraries_to_link.is_whole_archive",
-                        ),
-                        flag_group(
-                            flags = ["-Wl,-force_load,%{libraries_to_link.object_files}"],
-                            expand_if_true = "libraries_to_link.is_whole_archive",
-                        ),
-                    ],
-                    expand_if_equal = variable_with_value(
-                        name = "libraries_to_link.type",
-                        value = "object_file_group",
-                    ),
-                ),
-                flag_group(
-                    flag_groups = [
-                        flag_group(
-                            flags = ["%{libraries_to_link.name}"],
-                            expand_if_false = "libraries_to_link.is_whole_archive",
-                        ),
-                        flag_group(
-                            flags = ["-Wl,-force_load,%{libraries_to_link.name}"],
-                            expand_if_true = "libraries_to_link.is_whole_archive",
-                        ),
-                    ],
-                    expand_if_equal = variable_with_value(
-                        name = "libraries_to_link.type",
-                        value = "object_file",
-                    ),
-                ),
-                flag_group(
-                    flag_groups = [
-                        flag_group(
-                            flags = ["%{libraries_to_link.name}"],
-                            expand_if_false = "libraries_to_link.is_whole_archive",
-                        ),
-                        flag_group(
-                            flags = ["-Wl,-force_load,%{libraries_to_link.name}"],
-                            expand_if_true = "libraries_to_link.is_whole_archive",
-                        ),
-                    ],
-                    expand_if_equal = variable_with_value(
-                        name = "libraries_to_link.type",
-                        value = "interface_library",
-                    ),
-                ),
-                flag_group(
-                    flag_groups = [
-                        flag_group(
-                            flags = ["%{libraries_to_link.name}"],
-                            expand_if_false = "libraries_to_link.is_whole_archive",
-                        ),
-                        flag_group(
-                            flags = ["-Wl,-force_load,%{libraries_to_link.name}"],
-                            expand_if_true = "libraries_to_link.is_whole_archive",
-                        ),
-                    ],
-                    expand_if_equal = variable_with_value(
-                        name = "libraries_to_link.type",
-                        value = "static_library",
-                    ),
-                ),
-                flag_group(
-                    flag_groups = [
-                        flag_group(
-                            flags = ["-l%{libraries_to_link.name}"],
-                            expand_if_false = "libraries_to_link.is_whole_archive",
-                        ),
-                        flag_group(
-                            flags = ["-Wl,-force_load,-l%{libraries_to_link.name}"],
-                            expand_if_true = "libraries_to_link.is_whole_archive",
-                        ),
-                    ],
-                    expand_if_equal = variable_with_value(
-                        name = "libraries_to_link.type",
-                        value = "dynamic_library",
-                    ),
-                ),
-                flag_group(
-                    flag_groups = [
-                        flag_group(
-                            flags = ["-l:%{libraries_to_link.name}"],
-                            expand_if_false = "libraries_to_link.is_whole_archive",
-                        ),
-                        flag_group(
-                            flags = ["-Wl,-force_load,-l:%{libraries_to_link.name}"],
-                            expand_if_true = "libraries_to_link.is_whole_archive",
-                        ),
-                    ],
-                    expand_if_equal = variable_with_value(
-                        name = "libraries_to_link.type",
-                        value = "versioned_dynamic_library",
-                    ),
-                ),
-            ],
-            expand_if_available = "libraries_to_link",
-        )
-    elif flavour == "msvc":
-        return flag_group(
-            iterate_over = "libraries_to_link",
-            flag_groups = [
-                flag_group(
-                    iterate_over = "libraries_to_link.object_files",
-                    flag_groups = [flag_group(flags = ["%{libraries_to_link.object_files}"])],
-                    expand_if_equal = variable_with_value(
-                        name = "libraries_to_link.type",
-                        value = "object_file_group",
-                    ),
-                ),
-                flag_group(
-                    flag_groups = [flag_group(flags = ["%{libraries_to_link.name}"])],
-                    expand_if_equal = variable_with_value(
-                        name = "libraries_to_link.type",
-                        value = "object_file",
-                    ),
-                ),
-                flag_group(
-                    flag_groups = [flag_group(flags = ["%{libraries_to_link.name}"])],
-                    expand_if_equal = variable_with_value(
-                        name = "libraries_to_link.type",
-                        value = "interface_library",
-                    ),
-                ),
-                flag_group(
-                    flag_groups = [
-                        flag_group(
-                            flags = ["%{libraries_to_link.name}"],
-                            expand_if_false = "libraries_to_link.is_whole_archive",
-                        ),
-                        flag_group(
-                            flags = ["/WHOLEARCHIVE:%{libraries_to_link.name}"],
-                            expand_if_true = "libraries_to_link.is_whole_archive",
-                        ),
-                    ],
-                    expand_if_equal = variable_with_value(
-                        name = "libraries_to_link.type",
-                        value = "static_library",
-                    ),
-                ),
-            ],
-            expand_if_available = "libraries_to_link",
-        )
+def all_assembly_actions():
+    return [
+        ACTION_NAMES.assemble,
+        ACTION_NAMES.preprocess_assemble,
+    ]
 
-def _impl(ctx):
-    all_compile_actions = [
+def all_compile_actions():
+    return [
         ACTION_NAMES.assemble,
         ACTION_NAMES.c_compile,
         ACTION_NAMES.cpp_compile,
@@ -252,7 +34,22 @@ def _impl(ctx):
         ACTION_NAMES.preprocess_assemble,
     ]
 
-    all_preprocessed_actions = [
+def all_c_compile_actions():
+    return [
+        ACTION_NAMES.c_compile,
+    ]
+
+def all_cpp_compile_actions():
+    return [
+        ACTION_NAMES.cpp_compile,
+        ACTION_NAMES.cpp_header_parsing,
+        ACTION_NAMES.cpp_module_codegen,
+        ACTION_NAMES.cpp_module_compile,
+        ACTION_NAMES.linkstamp_compile,
+    ]
+
+def all_preprocessed_actions():
+    return [
         ACTION_NAMES.c_compile,
         ACTION_NAMES.cpp_compile,
         ACTION_NAMES.cpp_header_parsing,
@@ -262,111 +59,211 @@ def _impl(ctx):
         ACTION_NAMES.preprocess_assemble,
     ]
 
-    all_link_actions = [
+def all_link_actions():
+    return [
         ACTION_NAMES.cpp_link_executable,
         ACTION_NAMES.cpp_link_dynamic_library,
         ACTION_NAMES.cpp_link_nodeps_dynamic_library,
     ]
 
-    all_archive_actions = [ACTION_NAMES.cpp_link_static_library]
-
-    all_cpp_compile_actions = [
-        ACTION_NAMES.cpp_compile,
-        ACTION_NAMES.cpp_header_parsing,
-        ACTION_NAMES.cpp_module_codegen,
-        ACTION_NAMES.cpp_module_compile,
-        ACTION_NAMES.linkstamp_compile,
+def all_executable_link_actions():
+    return [
+        ACTION_NAMES.cpp_link_executable,
     ]
 
+def all_shared_library_link_actions():
+    return [
+        ACTION_NAMES.cpp_link_dynamic_library,
+        ACTION_NAMES.cpp_link_nodeps_dynamic_library,
+    ]
+
+def all_archive_actions():
+    return [ACTION_NAMES.cpp_link_static_library]
+
+def all_strip_actions():
+    return [ACTION_NAMES.strip]
+
+def _library_to_link(flag_prefix, value, iterate = None):
+    return flag_group(
+        flags = [
+            "{}%{{libraries_to_link.{}}}".format(
+                flag_prefix,
+                iterate if iterate else "name",
+            ),
+        ],
+        iterate_over = ("libraries_to_link." + iterate if iterate else None),
+        expand_if_equal = variable_with_value(
+            name = "libraries_to_link.type",
+            value = value,
+        ),
+    )
+
+def _surround_static_library(prefix, suffix):
+    return [
+        flag_group(
+            flags = [prefix, "%{libraries_to_link.name}", suffix],
+            expand_if_true = "libraries_to_link.is_whole_archive",
+        ),
+        flag_group(
+            flags = ["%{libraries_to_link.name}"],
+            expand_if_false = "libraries_to_link.is_whole_archive",
+        ),
+    ]
+
+def _prefix_static_library(prefix):
+    return [
+        flag_group(
+            flags = ["%{libraries_to_link.name}"],
+            expand_if_false = "libraries_to_link.is_whole_archive",
+        ),
+        flag_group(
+            flags = [prefix + "%{libraries_to_link.name}"],
+            expand_if_true = "libraries_to_link.is_whole_archive",
+        ),
+    ]
+
+def _static_library_to_link(alwayslink_prefix, alwayslink_suffix = None):
+    if alwayslink_suffix:
+        flag_groups = _surround_static_library(alwayslink_prefix, alwayslink_suffix)
+    else:
+        flag_groups = _prefix_static_library(alwayslink_prefix)
+    return flag_group(
+        flag_groups = flag_groups,
+        expand_if_equal = variable_with_value(
+            name = "libraries_to_link.type",
+            value = "static_library",
+        ),
+    )
+
+def _iterate_flag_group(iterate_over, flags = [], flag_groups = []):
+    return flag_group(
+        iterate_over = iterate_over,
+        expand_if_available = iterate_over,
+        flag_groups = flag_groups,
+        flags = flags,
+    )
+
+def _libraries_to_link_group(flavour):
+    if flavour == "linux":
+        return _iterate_flag_group(
+            iterate_over = "libraries_to_link",
+            flag_groups = [
+                flag_group(
+                    flags = ["-Wl,--start-lib"],
+                    expand_if_equal = variable_with_value(
+                        name = "libraries_to_link.type",
+                        value = "object_file_group",
+                    ),
+                ),
+                _library_to_link("", "object_file_group", "object_files"),
+                flag_group(
+                    flags = ["-Wl,--end-lib"],
+                    expand_if_equal = variable_with_value(
+                        name = "libraries_to_link.type",
+                        value = "object_file_group",
+                    ),
+                ),
+                _library_to_link("", "object_file"),
+                _library_to_link("", "interface_library"),
+                _static_library_to_link("-Wl,-whole-archive", "-Wl,-no-whole-archive"),
+                _library_to_link("-l", "dynamic_library"),
+                _library_to_link("-l:", "versioned_dynamic_library"),
+            ],
+        )
+    elif flavour == "darwin":
+        return _iterate_flag_group(
+            iterate_over = "libraries_to_link",
+            flag_groups = [
+                _library_to_link("", "object_file_group", "object_files"),
+                _library_to_link("", "object_file"),
+                _library_to_link("", "interface_library"),
+                _static_library_to_link("-Wl,-force_load,"),
+                _library_to_link("-l", "dynamic_library"),
+                _library_to_link("-l:", "versioned_dynamic_library"),
+            ],
+        )
+    elif flavour == "msvc":
+        return _iterate_flag_group(
+            iterate_over = "libraries_to_link",
+            flag_groups = [
+                _library_to_link("", "object_file_group", "object_files"),
+                _library_to_link("", "object_file"),
+                _library_to_link("", "interface_library"),
+                _static_library_to_link("/WHOLEARCHIVE:"),
+            ],
+        )
+
+def _action_configs_with_tool(path, actions):
+    return [
+        action_config(
+            action_name = name,
+            enabled = True,
+            tools = [tool(path = path)],
+        )
+        for name in actions
+    ]
+
+def _action_configs(assembly_path, c_compiler_path, cc_compiler_path, archiver_path, linker_path, strip_path):
+    return _action_configs_with_tool(
+        assembly_path,
+        all_assembly_actions(),
+    ) + _action_configs_with_tool(
+        c_compiler_path,
+        all_c_compile_actions(),
+    ) + _action_configs_with_tool(
+        cc_compiler_path,
+        all_cpp_compile_actions(),
+    ) + _action_configs_with_tool(
+        archiver_path,
+        all_archive_actions(),
+    ) + _action_configs_with_tool(
+        linker_path,
+        all_link_actions(),
+    ) + _action_configs_with_tool(
+        strip_path,
+        all_strip_actions(),
+    )
+
+def _impl(ctx):
     if (ctx.attr.cpu == "darwin"):
         toolchain_identifier = "local_darwin"
+        target_cpu = "darwin"
+        target_libc = "macosx"
+        compiler = "compiler"
+        action_configs = _action_configs(
+            assembly_path = ctx.attr.host_compiler_path,
+            c_compiler_path = ctx.attr.host_compiler_path,
+            cc_compiler_path = ctx.attr.host_compiler_path,
+            archiver_path = ctx.attr.host_compiler_prefix + "/libtool",
+            linker_path = ctx.attr.host_compiler_path,
+            strip_path = ctx.attr.host_compiler_prefix + "/strip",
+        )
     elif (ctx.attr.cpu == "local"):
         toolchain_identifier = "local_linux"
+        target_cpu = "local"
+        target_libc = "local"
+        compiler = "compiler"
+        action_configs = _action_configs(
+            assembly_path = ctx.attr.host_compiler_path,
+            c_compiler_path = ctx.attr.host_compiler_path,
+            cc_compiler_path = ctx.attr.host_compiler_path,
+            archiver_path = ctx.attr.host_compiler_prefix + "/ar",
+            linker_path = ctx.attr.host_compiler_path,
+            strip_path = ctx.attr.host_compiler_prefix + "/strip",
+        )
     elif (ctx.attr.cpu == "x64_windows"):
         toolchain_identifier = "local_windows"
-    else:
-        fail("Unreachable")
-
-    if (ctx.attr.cpu == "darwin"):
-        target_cpu = "darwin"
-    elif (ctx.attr.cpu == "local"):
-        target_cpu = "local"
-    elif (ctx.attr.cpu == "x64_windows"):
         target_cpu = "x64_windows"
-    else:
-        fail("Unreachable")
-
-    if (ctx.attr.cpu == "local"):
-        target_libc = "local"
-    elif (ctx.attr.cpu == "darwin"):
-        target_libc = "macosx"
-    elif (ctx.attr.cpu == "x64_windows"):
         target_libc = "msvcrt"
-    else:
-        fail("Unreachable")
-
-    if (ctx.attr.cpu == "darwin" or
-        ctx.attr.cpu == "local"):
-        compiler = "compiler"
-    elif (ctx.attr.cpu == "x64_windows"):
         compiler = "msvc-cl"
-    else:
-        fail("Unreachable")
-
-    if (ctx.attr.cpu == "darwin" or
-        ctx.attr.cpu == "local"):
-        action_configs = [
-            action_config(
-                action_name = name,
-                enabled = True,
-                tools = [tool(path = ctx.attr.host_compiler_path)],
-            )
-            for name in all_compile_actions + all_link_actions
-        ] + [
-            action_config(
-                action_name = name,
-                enabled = True,
-                tools = [tool(path = ctx.attr.host_compiler_prefix + "/ar")],
-            )
-            for name in all_archive_actions
-        ] + [
-            action_config(
-                action_name = name,
-                enabled = True,
-                tools = [tool(path = ctx.attr.host_compiler_prefix + "/strip")],
-            )
-            for name in [ACTION_NAMES.strip]
-        ]
-    elif (ctx.attr.cpu == "x64_windows"):
-        action_configs = [
-            action_config(
-                action_name = name,
-                enabled = True,
-                tools = [tool(path = ctx.attr.msvc_link_path)],
-            )
-            for name in all_link_actions
-        ] + [
-            action_config(
-                action_name = name,
-                enabled = True,
-                tools = [tool(path = ctx.attr.msvc_lib_path)],
-            )
-            for name in all_archive_actions
-        ] + [
-            action_config(
-                action_name = name,
-                enabled = True,
-                tools = [tool(path = ctx.attr.msvc_ml_path)],
-            )
-            for name in [ACTION_NAMES.assemble, ACTION_NAMES.preprocess_assemble]
-        ] + [
-            action_config(
-                action_name = name,
-                enabled = True,
-                tools = [tool(path = ctx.attr.msvc_cl_path)],
-            )
-            for name in [ACTION_NAMES.c_compile] + all_cpp_compile_actions
-        ]
+        action_configs = _action_configs(
+            assembly_path = ctx.attr.msvc_ml_path,
+            c_compiler_path = ctx.attr.msvc_cl_path,
+            cc_compiler_path = ctx.attr.msvc_cl_path,
+            archiver_path = ctx.attr.msvc_lib_path,
+            linker_path = ctx.attr.msvc_link_path,
+            strip_path = "fake_tool_strip_not_supported",
+        )
     else:
         fail("Unreachable")
 
@@ -390,7 +287,7 @@ def _impl(ctx):
                 enabled = True,
                 flag_sets = [
                     flag_set(
-                        actions = all_compile_actions,
+                        actions = all_compile_actions(),
                         flag_groups = [
                             flag_group(
                                 flags = ["-MD", "-MF", "%{dependency_file}"],
@@ -403,47 +300,46 @@ def _impl(ctx):
                         ],
                     ),
                     flag_set(
-                        actions = all_preprocessed_actions,
+                        actions = all_preprocessed_actions(),
                         flag_groups = [
                             flag_group(
                                 flags = ["-frandom-seed=%{output_file}"],
                                 expand_if_available = "output_file",
                             ),
-                            flag_group(
+                            _iterate_flag_group(
                                 flags = ["-D%{preprocessor_defines}"],
                                 iterate_over = "preprocessor_defines",
                             ),
-                            flag_group(
+                            _iterate_flag_group(
                                 flags = ["-include", "%{includes}"],
                                 iterate_over = "includes",
-                                expand_if_available = "includes",
                             ),
-                            flag_group(
+                            _iterate_flag_group(
                                 flags = ["-iquote", "%{quote_include_paths}"],
                                 iterate_over = "quote_include_paths",
                             ),
-                            flag_group(
+                            _iterate_flag_group(
                                 flags = ["-I%{include_paths}"],
                                 iterate_over = "include_paths",
                             ),
-                            flag_group(
+                            _iterate_flag_group(
                                 flags = ["-isystem", "%{system_include_paths}"],
                                 iterate_over = "system_include_paths",
                             ),
-                            flag_group(
+                            _iterate_flag_group(
                                 flags = ["-F", "%{framework_include_paths}"],
                                 iterate_over = "framework_include_paths",
                             ),
                         ],
                     ),
                     flag_set(
-                        actions = all_cpp_compile_actions,
+                        actions = all_cpp_compile_actions(),
                         flag_groups = [
                             flag_group(flags = ["-fexperimental-new-pass-manager"]),
                         ] if ctx.attr.compiler == "clang" else [],
                     ),
                     flag_set(
-                        actions = all_compile_actions,
+                        actions = all_compile_actions(),
                         flag_groups = [
                             flag_group(
                                 flags = [
@@ -475,12 +371,12 @@ def _impl(ctx):
                         ],
                     ),
                     flag_set(
-                        actions = all_compile_actions,
+                        actions = all_compile_actions(),
                         flag_groups = [flag_group(flags = ["-DNDEBUG"])],
                         with_features = [with_feature_set(features = ["disable-assertions"])],
                     ),
                     flag_set(
-                        actions = all_compile_actions,
+                        actions = all_compile_actions(),
                         flag_groups = [
                             flag_group(
                                 flags = [
@@ -494,22 +390,21 @@ def _impl(ctx):
                         with_features = [with_feature_set(features = ["opt"])],
                     ),
                     flag_set(
-                        actions = all_compile_actions,
+                        actions = all_compile_actions(),
                         flag_groups = [flag_group(flags = ["-g"])],
                         with_features = [with_feature_set(features = ["dbg"])],
                     ),
                 ] + (
                     [
-                        flag_set(actions = all_compile_actions, flag_groups = [cuda_group]),
+                        flag_set(actions = all_compile_actions(), flag_groups = [cuda_group]),
                     ] if ctx.attr.cuda_path else []
                 ) + [
                     flag_set(
-                        actions = all_compile_actions,
+                        actions = all_compile_actions(),
                         flag_groups = [
-                            flag_group(
+                            _iterate_flag_group(
                                 flags = ["%{user_compile_flags}"],
                                 iterate_over = "user_compile_flags",
-                                expand_if_available = "user_compile_flags",
                             ),
                             sysroot_group,
                             flag_group(
@@ -537,7 +432,7 @@ def _impl(ctx):
                 enabled = True,
                 flag_sets = [
                     flag_set(
-                        actions = all_archive_actions,
+                        actions = all_archive_actions(),
                         flag_groups = [
                             flag_group(
                                 expand_if_available = "linker_param_file",
@@ -578,48 +473,40 @@ def _impl(ctx):
                 enabled = True,
                 flag_sets = [
                     flag_set(
-                        actions = [
-                            ACTION_NAMES.cpp_link_dynamic_library,
-                            ACTION_NAMES.cpp_link_nodeps_dynamic_library,
-                        ],
+                        actions = all_shared_library_link_actions(),
                         flag_groups = [flag_group(flags = ["-shared"])],
                     ),
                     flag_set(
-                        actions = all_link_actions,
+                        actions = all_link_actions(),
                         flag_groups = [
                             flag_group(
                                 flags = ["@%{linker_param_file}"],
                                 expand_if_available = "linker_param_file",
                             ),
-                            flag_group(
+                            _iterate_flag_group(
                                 flags = ["%{linkstamp_paths}"],
                                 iterate_over = "linkstamp_paths",
-                                expand_if_available = "linkstamp_paths",
                             ),
                             flag_group(
                                 flags = ["-o", "%{output_execpath}"],
                                 expand_if_available = "output_execpath",
                             ),
-                            flag_group(
+                            _iterate_flag_group(
                                 flags = ["-L%{library_search_directories}"],
                                 iterate_over = "library_search_directories",
-                                expand_if_available = "library_search_directories",
                             ),
-                            flag_group(
+                            _iterate_flag_group(
                                 iterate_over = "runtime_library_search_directories",
                                 flags = [
                                     "-Wl,-rpath,$ORIGIN/%{runtime_library_search_directories}",
                                 ] if ctx.attr.cpu == "local" else [
                                     "-Wl,-rpath,@loader_path/%{runtime_library_search_directories}",
                                 ],
-                                expand_if_available =
-                                    "runtime_library_search_directories",
                             ),
-                            libraries_to_link_group("darwin" if ctx.attr.cpu == "darwin" else "linux"),
-                            flag_group(
+                            _libraries_to_link_group("darwin" if ctx.attr.cpu == "darwin" else "linux"),
+                            _iterate_flag_group(
                                 flags = ["%{user_link_flags}"],
                                 iterate_over = "user_link_flags",
-                                expand_if_available = "user_link_flags",
                             ),
                             flag_group(
                                 flags = ["-Wl,--gdb-index"],
@@ -634,30 +521,30 @@ def _impl(ctx):
                         ],
                     ),
                     flag_set(
-                        actions = [ACTION_NAMES.cpp_link_executable],
+                        actions = all_executable_link_actions(),
                         flag_groups = [flag_group(flags = ["-pie"])],
                     ),
                 ] + ([
                     flag_set(
-                        actions = all_link_actions,
+                        actions = all_link_actions(),
                         flag_groups = [flag_group(flags = [
                             "-Wl,-z,relro,-z,now",
                         ])],
                     ),
                 ] if ctx.attr.cpu == "local" else []) + [
                     flag_set(
-                        actions = all_link_actions,
+                        actions = all_link_actions(),
                         flag_groups = [flag_group(flags = ["-Wl,-no-as-needed"])],
                         with_features = [with_feature_set(features = ["alwayslink"])],
                     ),
                     flag_set(
-                        actions = all_link_actions,
+                        actions = all_link_actions(),
                         flag_groups = [
                             flag_group(flags = ["-B" + ctx.attr.linker_bin_path]),
                         ],
                     ),
                 ] + ([flag_set(
-                    actions = all_link_actions,
+                    actions = all_link_actions(),
                     flag_groups = [
                         flag_group(flags = ["-Wl,--gc-sections"]),
                         flag_group(
@@ -666,19 +553,19 @@ def _impl(ctx):
                     ],
                 )] if ctx.attr.cpu == "local" else []) + ([
                     flag_set(
-                        actions = all_link_actions,
+                        actions = all_link_actions(),
                         flag_groups = [flag_group(flags = ["-undefined", "dynamic_lookup"])],
                     ),
                 ] if ctx.attr.cpu == "darwin" else []) + (
                     [
                         flag_set(
-                            actions = all_link_actions,
+                            actions = all_link_actions(),
                             flag_groups = [cuda_group],
                         ),
                     ] if ctx.attr.cuda_path else []
                 ) + [
                     flag_set(
-                        actions = all_link_actions,
+                        actions = all_link_actions(),
                         flag_groups = [
                             sysroot_group,
                         ],
@@ -701,7 +588,7 @@ def _impl(ctx):
                 enabled = True,
                 env_sets = [
                     env_set(
-                        actions = all_compile_actions + all_link_actions + all_archive_actions,
+                        actions = all_compile_actions() + all_link_actions() + all_archive_actions(),
                         env_entries = [
                             env_entry(key = "PATH", value = ctx.attr.msvc_env_path),
                             env_entry(key = "INCLUDE", value = ctx.attr.msvc_env_include),
@@ -713,7 +600,7 @@ def _impl(ctx):
                 ],
                 flag_sets = [
                     flag_set(
-                        actions = all_compile_actions + all_link_actions + all_archive_actions,
+                        actions = all_compile_actions() + all_link_actions() + all_archive_actions(),
                         flag_groups = [flag_group(flags = ["/nologo"])],
                     ),
                 ],
@@ -723,7 +610,7 @@ def _impl(ctx):
                 enabled = True,
                 flag_sets = [
                     flag_set(
-                        actions = all_compile_actions,
+                        actions = all_compile_actions(),
                         flag_groups = [
                             flag_group(
                                 flags = [
@@ -751,70 +638,69 @@ def _impl(ctx):
                                     "/wd4996",
                                 ],
                             ),
-                            flag_group(
+                            _iterate_flag_group(
                                 flags = ["/I%{quote_include_paths}"],
                                 iterate_over = "quote_include_paths",
                             ),
-                            flag_group(
+                            _iterate_flag_group(
                                 flags = ["/I%{include_paths}"],
                                 iterate_over = "include_paths",
                             ),
-                            flag_group(
+                            _iterate_flag_group(
                                 flags = ["/I%{system_include_paths}"],
                                 iterate_over = "system_include_paths",
                             ),
-                            flag_group(
+                            _iterate_flag_group(
                                 flags = ["/D%{preprocessor_defines}"],
                                 iterate_over = "preprocessor_defines",
                             ),
                         ],
                     ),
                     flag_set(
-                        actions = all_preprocessed_actions,
+                        actions = all_preprocessed_actions(),
                         flag_groups = [flag_group(flags = ["/showIncludes"])],
                     ),
                     flag_set(
-                        actions = all_compile_actions,
+                        actions = all_compile_actions(),
                         flag_groups = [flag_group(flags = ["/MT"])],
                         with_features = [with_feature_set(features = ["static_link_msvcrt_no_debug"])],
                     ),
                     flag_set(
-                        actions = all_compile_actions,
+                        actions = all_compile_actions(),
                         flag_groups = [flag_group(flags = ["/MD"])],
                         with_features = [with_feature_set(features = ["dynamic_link_msvcrt_no_debug"])],
                     ),
                     flag_set(
-                        actions = all_compile_actions,
+                        actions = all_compile_actions(),
                         flag_groups = [flag_group(flags = ["/MTd"])],
                         with_features = [with_feature_set(features = ["static_link_msvcrt_debug"])],
                     ),
                     flag_set(
-                        actions = all_compile_actions,
+                        actions = all_compile_actions(),
                         flag_groups = [flag_group(flags = ["/MDd"])],
                         with_features = [with_feature_set(features = ["dynamic_link_msvcrt_debug"])],
                     ),
                     flag_set(
-                        actions = all_compile_actions,
+                        actions = all_compile_actions(),
                         flag_groups = [flag_group(flags = ["/Od", "/Z7", "/DDEBUG"])],
                         with_features = [with_feature_set(features = ["dbg"])],
                     ),
                     flag_set(
-                        actions = all_compile_actions,
+                        actions = all_compile_actions(),
                         flag_groups = [flag_group(flags = ["/Od", "/Z7", "/DDEBUG"])],
                         with_features = [with_feature_set(features = ["fastbuild"])],
                     ),
                     flag_set(
-                        actions = all_compile_actions,
+                        actions = all_compile_actions(),
                         flag_groups = [flag_group(flags = ["/O2", "/DNDEBUG"])],
                         with_features = [with_feature_set(features = ["opt"])],
                     ),
                     flag_set(
-                        actions = all_preprocessed_actions,
+                        actions = all_preprocessed_actions(),
                         flag_groups = [
-                            flag_group(
+                            _iterate_flag_group(
                                 flags = ["%{user_compile_flags}"],
                                 iterate_over = "user_compile_flags",
-                                expand_if_available = "user_compile_flags",
                             ),
                         ] + ([
                             flag_group(flags = ctx.attr.host_unfiltered_compile_flags),
@@ -836,7 +722,7 @@ def _impl(ctx):
                         ],
                     ),
                     flag_set(
-                        actions = all_preprocessed_actions,
+                        actions = all_preprocessed_actions(),
                         flag_groups = [
                             flag_group(
                                 flag_groups = [
@@ -869,7 +755,7 @@ def _impl(ctx):
                         ],
                     ),
                     flag_set(
-                        actions = all_compile_actions,
+                        actions = all_compile_actions(),
                         flag_groups = [
                             flag_group(
                                 flags = ["/c", "%{source_file}"],
@@ -884,7 +770,7 @@ def _impl(ctx):
                 enabled = True,
                 flag_sets = [
                     flag_set(
-                        actions = all_archive_actions,
+                        actions = all_archive_actions(),
                         flag_groups = [
                             flag_group(
                                 flags = ["/OUT:%{output_execpath}"],
@@ -899,19 +785,15 @@ def _impl(ctx):
                 enabled = True,
                 flag_sets = [
                     flag_set(
-                        actions = [
-                            ACTION_NAMES.cpp_link_dynamic_library,
-                            ACTION_NAMES.cpp_link_nodeps_dynamic_library,
-                        ],
+                        actions = all_shared_library_link_actions(),
                         flag_groups = [flag_group(flags = ["/DLL"])],
                     ),
                     flag_set(
-                        actions = all_link_actions,
+                        actions = all_link_actions(),
                         flag_groups = [
-                            flag_group(
+                            _iterate_flag_group(
                                 flags = ["%{linkstamp_paths}"],
                                 iterate_over = "linkstamp_paths",
-                                expand_if_available = "linkstamp_paths",
                             ),
                             flag_group(
                                 flags = ["/OUT:%{output_execpath}"],
@@ -920,10 +802,7 @@ def _impl(ctx):
                         ],
                     ),
                     flag_set(
-                        actions = [
-                            ACTION_NAMES.cpp_link_dynamic_library,
-                            ACTION_NAMES.cpp_link_nodeps_dynamic_library,
-                        ],
+                        actions = all_shared_library_link_actions(),
                         flag_groups = [
                             flag_group(
                                 flags = ["/IMPLIB:%{interface_library_output_path}"],
@@ -932,27 +811,26 @@ def _impl(ctx):
                         ],
                     ),
                     flag_set(
-                        actions = all_link_actions +
-                                  all_archive_actions,
+                        actions = all_link_actions() +
+                                  all_archive_actions(),
                         flag_groups = [
-                            libraries_to_link_group("msvc"),
+                            _libraries_to_link_group("msvc"),
                         ],
                     ),
                     flag_set(
-                        actions = all_link_actions,
+                        actions = all_link_actions(),
                         flag_groups = [
                             flag_group(flags = ["/SUBSYSTEM:CONSOLE"]),
-                            flag_group(
+                            _iterate_flag_group(
                                 flags = ["%{user_link_flags}"],
                                 iterate_over = "user_link_flags",
-                                expand_if_available = "user_link_flags",
                             ),
                             flag_group(flags = ["/MACHINE:X64"]),
                         ],
                     ),
                     flag_set(
-                        actions = all_link_actions +
-                                  all_archive_actions,
+                        actions = all_link_actions() +
+                                  all_archive_actions(),
                         flag_groups = [
                             flag_group(
                                 flags = ["@%{linker_param_file}"],
@@ -961,39 +839,39 @@ def _impl(ctx):
                         ],
                     ),
                     flag_set(
-                        actions = all_link_actions,
+                        actions = all_link_actions(),
                         flag_groups = [flag_group(flags = ["/DEFAULTLIB:libcmt.lib"])],
                         with_features = [with_feature_set(features = ["static_link_msvcrt_no_debug"])],
                     ),
                     flag_set(
-                        actions = all_link_actions,
+                        actions = all_link_actions(),
                         flag_groups = [flag_group(flags = ["/DEFAULTLIB:msvcrt.lib"])],
                         with_features = [with_feature_set(features = ["dynamic_link_msvcrt_no_debug"])],
                     ),
                     flag_set(
-                        actions = all_link_actions,
+                        actions = all_link_actions(),
                         flag_groups = [flag_group(flags = ["/DEFAULTLIB:libcmtd.lib"])],
                         with_features = [with_feature_set(features = ["static_link_msvcrt_debug"])],
                     ),
                     flag_set(
-                        actions = all_link_actions,
+                        actions = all_link_actions(),
                         flag_groups = [flag_group(flags = ["/DEFAULTLIB:msvcrtd.lib"])],
                         with_features = [with_feature_set(features = ["dynamic_link_msvcrt_debug"])],
                     ),
                     flag_set(
-                        actions = all_link_actions,
+                        actions = all_link_actions(),
                         flag_groups = [flag_group(flags = ["/DEBUG:FULL", "/INCREMENTAL:NO"])],
                         with_features = [with_feature_set(features = ["dbg"])],
                     ),
                     flag_set(
-                        actions = all_link_actions,
+                        actions = all_link_actions(),
                         flag_groups = [
                             flag_group(flags = ["/DEBUG:FASTLINK", "/INCREMENTAL:NO"]),
                         ],
                         with_features = [with_feature_set(features = ["fastbuild"])],
                     ),
                     flag_set(
-                        actions = all_link_actions,
+                        actions = all_link_actions(),
                         flag_groups = [
                             flag_group(
                                 flags = ["/DEF:%{def_file_path}", "/ignore:4070"],
@@ -1087,7 +965,9 @@ def _impl(ctx):
     elif (ctx.attr.cpu == "local" or ctx.attr.cpu == "darwin"):
         tool_paths = [
             tool_path(name = "gcc", path = ctx.attr.host_compiler_path),
-            tool_path(name = "ar", path = ctx.attr.host_compiler_prefix + "/ar"),
+            tool_path(name = "ar", path = ctx.attr.host_compiler_prefix + (
+                "/ar" if ctx.attr.cpu == "local" else "/libtool"
+            )),
             tool_path(name = "compat-ld", path = ctx.attr.host_compiler_prefix + "/ld"),
             tool_path(name = "cpp", path = ctx.attr.host_compiler_prefix + "/cpp"),
             tool_path(name = "dwp", path = ctx.attr.host_compiler_prefix + "/dwp"),
