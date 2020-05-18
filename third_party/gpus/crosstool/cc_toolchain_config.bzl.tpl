@@ -292,6 +292,9 @@ def _cuda_set(cuda_path, actions):
     else:
         return []
 
+def _nologo():
+  return flag_group(flags = ["/nologo"])
+
 def _features(cpu, compiler, ctx):
     if cpu in ["local", "darwin"]:
         return [
@@ -611,12 +614,6 @@ def _features(cpu, compiler, ctx):
                         ],
                     ),
                 ],
-                flag_sets = [
-                    flag_set(
-                        actions = all_compile_actions() + all_link_actions() + all_archive_actions(),
-                        flag_groups = [flag_group(flags = ["/nologo"])],
-                    ),
-                ],
             ),
             feature(
                 name = "all_compile_flags",
@@ -631,6 +628,7 @@ def _features(cpu, compiler, ctx):
                                     "external/local_config_cuda/crosstool/windows/msvc_wrapper_for_nvcc.py",
                                 ],
                             ),
+                            _nologo(),
                             flag_group(
                                 flags = [
                                     "/DCOMPILER_MSVC",
@@ -785,6 +783,7 @@ def _features(cpu, compiler, ctx):
                     flag_set(
                         actions = all_archive_actions(),
                         flag_groups = [
+                            _nologo(),
                             flag_group(
                                 flags = ["/OUT:%{output_execpath}"],
                                 expand_if_available = "output_execpath",
@@ -804,6 +803,7 @@ def _features(cpu, compiler, ctx):
                     flag_set(
                         actions = all_link_actions(),
                         flag_groups = [
+                            _nologo(),
                             _iterate_flag_group(
                                 flags = ["%{linkstamp_paths}"],
                                 iterate_over = "linkstamp_paths",
