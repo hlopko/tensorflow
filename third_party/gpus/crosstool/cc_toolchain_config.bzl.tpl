@@ -283,7 +283,7 @@ def _impl(ctx):
         features = [
             feature(name = "no_legacy_features"),
             feature(
-                name = "default_compile_flags",
+                name = "all_compile_flags",
                 enabled = True,
                 flag_sets = [
                     flag_set(
@@ -428,7 +428,7 @@ def _impl(ctx):
                 ],
             ),
             feature(
-                name = "default_archive_flags",
+                name = "all_archive_flags",
                 enabled = True,
                 flag_sets = [
                     flag_set(
@@ -469,7 +469,7 @@ def _impl(ctx):
                 ],
             ),
             feature(
-                name = "default_link_flags",
+                name = "all_link_flags",
                 enabled = True,
                 flag_sets = [
                     flag_set(
@@ -606,7 +606,7 @@ def _impl(ctx):
                 ],
             ),
             feature(
-                name = "default_compile_flags",
+                name = "all_compile_flags",
                 enabled = True,
                 flag_sets = [
                     flag_set(
@@ -766,7 +766,7 @@ def _impl(ctx):
                 ],
             ),
             feature(
-                name = "default_archive_flags",
+                name = "all_archive_flags",
                 enabled = True,
                 flag_sets = [
                     flag_set(
@@ -781,7 +781,7 @@ def _impl(ctx):
                 ],
             ),
             feature(
-                name = "default_link_flags",
+                name = "all_link_flags",
                 enabled = True,
                 flag_sets = [
                     flag_set(
