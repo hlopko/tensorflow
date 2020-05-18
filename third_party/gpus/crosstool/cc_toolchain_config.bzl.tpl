@@ -224,63 +224,77 @@ def _action_configs(assembly_path, c_compiler_path, cc_compiler_path, archiver_p
         all_strip_actions(),
     )
 
-def _impl(ctx):
-    if (ctx.attr.cpu == "darwin"):
-        toolchain_identifier = "local_darwin"
-        target_cpu = "darwin"
-        target_libc = "macosx"
-        compiler = "compiler"
-        action_configs = _action_configs(
-            assembly_path = ctx.attr.host_compiler_path,
-            c_compiler_path = ctx.attr.host_compiler_path,
-            cc_compiler_path = ctx.attr.host_compiler_path,
-            archiver_path = ctx.attr.host_compiler_prefix + "/libtool",
-            linker_path = ctx.attr.host_compiler_path,
-            strip_path = ctx.attr.host_compiler_prefix + "/strip",
-        )
-    elif (ctx.attr.cpu == "local"):
-        toolchain_identifier = "local_linux"
-        target_cpu = "local"
-        target_libc = "local"
-        compiler = "compiler"
-        action_configs = _action_configs(
-            assembly_path = ctx.attr.host_compiler_path,
-            c_compiler_path = ctx.attr.host_compiler_path,
-            cc_compiler_path = ctx.attr.host_compiler_path,
-            archiver_path = ctx.attr.host_compiler_prefix + "/ar",
-            linker_path = ctx.attr.host_compiler_path,
-            strip_path = ctx.attr.host_compiler_prefix + "/strip",
-        )
-    elif (ctx.attr.cpu == "x64_windows"):
-        toolchain_identifier = "local_windows"
-        target_cpu = "x64_windows"
-        target_libc = "msvcrt"
-        compiler = "msvc-cl"
-        action_configs = _action_configs(
-            assembly_path = ctx.attr.msvc_ml_path,
-            c_compiler_path = ctx.attr.msvc_cl_path,
-            cc_compiler_path = ctx.attr.msvc_cl_path,
-            archiver_path = ctx.attr.msvc_lib_path,
-            linker_path = ctx.attr.msvc_link_path,
-            strip_path = "fake_tool_strip_not_supported",
-        )
+def _tool_paths(cpu, ctx):
+    if cpu in ["local", "darwin"]:
+        return [
+            tool_path(name = "gcc", path = ctx.attr.host_compiler_path),
+            tool_path(name = "ar", path = ctx.attr.host_compiler_prefix + (
+                "/ar" if cpu == "local" else "/libtool"
+            )),
+            tool_path(name = "compat-ld", path = ctx.attr.host_compiler_prefix + "/ld"),
+            tool_path(name = "cpp", path = ctx.attr.host_compiler_prefix + "/cpp"),
+            tool_path(name = "dwp", path = ctx.attr.host_compiler_prefix + "/dwp"),
+            tool_path(name = "gcov", path = ctx.attr.host_compiler_prefix + "/gcov"),
+            tool_path(name = "ld", path = ctx.attr.host_compiler_prefix + "/ld"),
+            tool_path(name = "nm", path = ctx.attr.host_compiler_prefix + "/nm"),
+            tool_path(name = "objcopy", path = ctx.attr.host_compiler_prefix + "/objcopy"),
+            tool_path(name = "objdump", path = ctx.attr.host_compiler_prefix + "/objdump"),
+            tool_path(name = "strip", path = ctx.attr.host_compiler_prefix + "/strip"),
+        ]
+    elif cpu == "x64_windows":
+        return [
+            tool_path(name = "ar", path = ctx.attr.msvc_lib_path),
+            tool_path(name = "ml", path = ctx.attr.msvc_ml_path),
+            tool_path(name = "cpp", path = ctx.attr.msvc_cl_path),
+            tool_path(name = "gcc", path = ctx.attr.msvc_cl_path),
+            tool_path(name = "gcov", path = "wrapper/bin/msvc_nop.bat"),
+            tool_path(name = "ld", path = ctx.attr.msvc_link_path),
+            tool_path(name = "nm", path = "wrapper/bin/msvc_nop.bat"),
+            tool_path(
+                name = "objcopy",
+                path = "wrapper/bin/msvc_nop.bat",
+            ),
+            tool_path(
+                name = "objdump",
+                path = "wrapper/bin/msvc_nop.bat",
+            ),
+            tool_path(
+                name = "strip",
+                path = "wrapper/bin/msvc_nop.bat",
+            ),
+        ]
     else:
         fail("Unreachable")
 
-    if (ctx.attr.cpu == "local" or ctx.attr.cpu == "darwin"):
-        sysroot_group = flag_group(
-            flags = ["--sysroot=%{sysroot}"],
-            expand_if_available = "sysroot",
+def _sysroot_group():
+    return flag_group(
+        flags = ["--sysroot=%{sysroot}"],
+        expand_if_available = "sysroot",
+    )
+
+def _no_canonical_prefixes_group(extra_flags):
+    return flag_group(
+        flags = [
+            "-no-canonical-prefixes",
+        ] + extra_flags,
+    )
+
+def _cuda_set(cuda_path, actions):
+    if cuda_path:
+        return flag_set(
+            actions = actions,
+            flag_groups = [
+                flag_group(
+                    flags = ["--cuda-path=" + cuda_path],
+                ),
+            ],
         )
-        no_canonical_prefixes_group = flag_group(
-            flags = [
-                "-no-canonical-prefixes",
-            ] + ctx.attr.extra_no_canonical_prefixes_flags,
-        )
-        cuda_group = flag_group(
-            flags = ["--cuda-path=" + ctx.attr.cuda_path],
-        )
-        features = [
+    else:
+        return []
+
+def _features(cpu, compiler, ctx):
+    if cpu in ["local", "darwin"]:
+        return [
             feature(name = "no_legacy_features"),
             feature(
                 name = "all_compile_flags",
@@ -336,7 +350,7 @@ def _impl(ctx):
                         actions = all_cpp_compile_actions(),
                         flag_groups = [
                             flag_group(flags = ["-fexperimental-new-pass-manager"]),
-                        ] if ctx.attr.compiler == "clang" else [],
+                        ] if compiler == "clang" else [],
                     ),
                     flag_set(
                         actions = all_compile_actions(),
@@ -367,7 +381,9 @@ def _impl(ctx):
                                     "-fno-omit-frame-pointer",
                                 ],
                             ),
-                            no_canonical_prefixes_group,
+                            _no_canonical_prefixes_group(
+                                ctx.attr.extra_no_canonical_prefixes_flags,
+                            ),
                         ],
                     ),
                     flag_set(
@@ -394,10 +410,9 @@ def _impl(ctx):
                         flag_groups = [flag_group(flags = ["-g"])],
                         with_features = [with_feature_set(features = ["dbg"])],
                     ),
-                ] + (
-                    [
-                        flag_set(actions = all_compile_actions(), flag_groups = [cuda_group]),
-                    ] if ctx.attr.cuda_path else []
+                ] + _cuda_set(
+                    ctx.attr.cuda_path,
+                    all_compile_actions,
                 ) + [
                     flag_set(
                         actions = all_compile_actions(),
@@ -406,7 +421,7 @@ def _impl(ctx):
                                 flags = ["%{user_compile_flags}"],
                                 iterate_over = "user_compile_flags",
                             ),
-                            sysroot_group,
+                            _sysroot_group(),
                             flag_group(
                                 expand_if_available = "source_file",
                                 flags = ["-c", "%{source_file}"],
@@ -499,11 +514,11 @@ def _impl(ctx):
                                 iterate_over = "runtime_library_search_directories",
                                 flags = [
                                     "-Wl,-rpath,$ORIGIN/%{runtime_library_search_directories}",
-                                ] if ctx.attr.cpu == "local" else [
+                                ] if cpu == "local" else [
                                     "-Wl,-rpath,@loader_path/%{runtime_library_search_directories}",
                                 ],
                             ),
-                            _libraries_to_link_group("darwin" if ctx.attr.cpu == "darwin" else "linux"),
+                            _libraries_to_link_group("darwin" if cpu == "darwin" else "linux"),
                             _iterate_flag_group(
                                 flags = ["%{user_link_flags}"],
                                 iterate_over = "user_link_flags",
@@ -516,8 +531,10 @@ def _impl(ctx):
                                 flags = ["-Wl,-S"],
                                 expand_if_available = "strip_debug_symbols",
                             ),
-                            flag_group(flags = ["-lc++" if ctx.attr.cpu == "darwin" else "-lstdc++"]),
-                            no_canonical_prefixes_group,
+                            flag_group(flags = ["-lc++" if cpu == "darwin" else "-lstdc++"]),
+                            _no_canonical_prefixes_group(
+                                ctx.attr.extra_no_canonical_prefixes_flags,
+                            ),
                         ],
                     ),
                     flag_set(
@@ -531,7 +548,7 @@ def _impl(ctx):
                             "-Wl,-z,relro,-z,now",
                         ])],
                     ),
-                ] if ctx.attr.cpu == "local" else []) + [
+                ] if cpu == "local" else []) + [
                     flag_set(
                         actions = all_link_actions(),
                         flag_groups = [flag_group(flags = ["-Wl,-no-as-needed"])],
@@ -551,28 +568,24 @@ def _impl(ctx):
                             flags = ["-Wl,--build-id=md5", "-Wl,--hash-style=gnu"],
                         ),
                     ],
-                )] if ctx.attr.cpu == "local" else []) + ([
+                )] if cpu == "local" else []) + ([
                     flag_set(
                         actions = all_link_actions(),
                         flag_groups = [flag_group(flags = ["-undefined", "dynamic_lookup"])],
                     ),
-                ] if ctx.attr.cpu == "darwin" else []) + (
-                    [
-                        flag_set(
-                            actions = all_link_actions(),
-                            flag_groups = [cuda_group],
-                        ),
-                    ] if ctx.attr.cuda_path else []
+                ] if cpu == "darwin" else []) + _cuda_set(
+                    ctx.attr.cuda_path,
+                    all_link_actions(),
                 ) + [
                     flag_set(
                         actions = all_link_actions(),
                         flag_groups = [
-                            sysroot_group,
+                            _sysroot_group(),
                         ],
                     ),
                 ],
             ),
-            feature(name = "alwayslink", enabled = ctx.attr.cpu == "local"),
+            feature(name = "alwayslink", enabled = cpu == "local"),
             feature(name = "opt"),
             feature(name = "fastbuild"),
             feature(name = "dbg"),
@@ -580,8 +593,8 @@ def _impl(ctx):
             feature(name = "pic", enabled = True),
             feature(name = "supports_pic", enabled = True),
         ]
-    elif (ctx.attr.cpu == "x64_windows"):
-        features = [
+    else:
+        return [
             feature(name = "no_legacy_features"),
             feature(
                 name = "common_flags",
@@ -937,47 +950,65 @@ def _impl(ctx):
                 enabled = True,
             ),
         ]
-    else:
-        fail("Unreachable")
 
-    if (ctx.attr.cpu == "x64_windows"):
-        tool_paths = [
-            tool_path(name = "ar", path = ctx.attr.msvc_lib_path),
-            tool_path(name = "ml", path = ctx.attr.msvc_ml_path),
-            tool_path(name = "cpp", path = ctx.attr.msvc_cl_path),
-            tool_path(name = "gcc", path = ctx.attr.msvc_cl_path),
-            tool_path(name = "gcov", path = "wrapper/bin/msvc_nop.bat"),
-            tool_path(name = "ld", path = ctx.attr.msvc_link_path),
-            tool_path(name = "nm", path = "wrapper/bin/msvc_nop.bat"),
-            tool_path(
-                name = "objcopy",
-                path = "wrapper/bin/msvc_nop.bat",
-            ),
-            tool_path(
-                name = "objdump",
-                path = "wrapper/bin/msvc_nop.bat",
-            ),
-            tool_path(
-                name = "strip",
-                path = "wrapper/bin/msvc_nop.bat",
-            ),
-        ]
-    elif (ctx.attr.cpu == "local" or ctx.attr.cpu == "darwin"):
-        tool_paths = [
-            tool_path(name = "gcc", path = ctx.attr.host_compiler_path),
-            tool_path(name = "ar", path = ctx.attr.host_compiler_prefix + (
-                "/ar" if ctx.attr.cpu == "local" else "/libtool"
-            )),
-            tool_path(name = "compat-ld", path = ctx.attr.host_compiler_prefix + "/ld"),
-            tool_path(name = "cpp", path = ctx.attr.host_compiler_prefix + "/cpp"),
-            tool_path(name = "dwp", path = ctx.attr.host_compiler_prefix + "/dwp"),
-            tool_path(name = "gcov", path = ctx.attr.host_compiler_prefix + "/gcov"),
-            tool_path(name = "ld", path = ctx.attr.host_compiler_prefix + "/ld"),
-            tool_path(name = "nm", path = ctx.attr.host_compiler_prefix + "/nm"),
-            tool_path(name = "objcopy", path = ctx.attr.host_compiler_prefix + "/objcopy"),
-            tool_path(name = "objdump", path = ctx.attr.host_compiler_prefix + "/objdump"),
-            tool_path(name = "strip", path = ctx.attr.host_compiler_prefix + "/strip"),
-        ]
+def _impl(ctx):
+    cpu = ctx.attr.cpu
+    compiler = ctx.attr.compiler
+
+    if (cpu == "darwin"):
+        toolchain_identifier = "local_darwin"
+        target_cpu = "darwin"
+        target_libc = "macosx"
+        compiler = "compiler"
+        action_configs = _action_configs(
+            assembly_path = ctx.attr.host_compiler_path,
+            c_compiler_path = ctx.attr.host_compiler_path,
+            cc_compiler_path = ctx.attr.host_compiler_path,
+            archiver_path = ctx.attr.host_compiler_prefix + "/libtool",
+            linker_path = ctx.attr.host_compiler_path,
+            strip_path = ctx.attr.host_compiler_prefix + "/strip",
+        )
+        features = _features(
+            cpu,
+            compiler,
+            ctx,
+        )
+    elif (cpu == "local"):
+        toolchain_identifier = "local_linux"
+        target_cpu = "local"
+        target_libc = "local"
+        compiler = "compiler"
+        action_configs = _action_configs(
+            assembly_path = ctx.attr.host_compiler_path,
+            c_compiler_path = ctx.attr.host_compiler_path,
+            cc_compiler_path = ctx.attr.host_compiler_path,
+            archiver_path = ctx.attr.host_compiler_prefix + "/ar",
+            linker_path = ctx.attr.host_compiler_path,
+            strip_path = ctx.attr.host_compiler_prefix + "/strip",
+        )
+        features = _features(
+            cpu,
+            compiler,
+            ctx,
+        )
+    elif (cpu == "x64_windows"):
+        toolchain_identifier = "local_windows"
+        target_cpu = "x64_windows"
+        target_libc = "msvcrt"
+        compiler = "msvc-cl"
+        action_configs = _action_configs(
+            assembly_path = ctx.attr.msvc_ml_path,
+            c_compiler_path = ctx.attr.msvc_cl_path,
+            cc_compiler_path = ctx.attr.msvc_cl_path,
+            archiver_path = ctx.attr.msvc_lib_path,
+            linker_path = ctx.attr.msvc_link_path,
+            strip_path = "fake_tool_strip_not_supported",
+        )
+        features = _features(
+            cpu,
+            compiler,
+            ctx,
+        )
     else:
         fail("Unreachable")
 
@@ -998,7 +1029,7 @@ def _impl(ctx):
             compiler = compiler,
             abi_version = "local",
             abi_libc_version = "local",
-            tool_paths = tool_paths,
+            tool_paths = _tool_paths(cpu, ctx),
             make_variables = [],
             builtin_sysroot = ctx.attr.builtin_sysroot,
             cc_target_os = None,
@@ -1012,6 +1043,7 @@ cc_toolchain_config = rule(
     implementation = _impl,
     attrs = {
         "cpu": attr.string(mandatory = True, values = ["darwin", "local", "x64_windows"]),
+        "compiler": attr.string(values = ["clang", "msvc", "unknown"], default = "unknown"),
         "builtin_include_directories": attr.string_list(),
         "extra_no_canonical_prefixes_flags": attr.string_list(),
         "host_compiler_path": attr.string(),
@@ -1029,7 +1061,6 @@ cc_toolchain_config = rule(
         "msvc_lib_path": attr.string(default = "msvc_not_used"),
         "msvc_link_path": attr.string(default = "msvc_not_used"),
         "msvc_ml_path": attr.string(default = "msvc_not_used"),
-        "compiler": attr.string(values = ["clang", "msvc", "unknown"], default = "unknown"),
     },
     provides = [CcToolchainConfigInfo],
     executable = True,
