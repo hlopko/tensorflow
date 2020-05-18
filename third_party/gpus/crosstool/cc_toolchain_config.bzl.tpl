@@ -894,6 +894,7 @@ def _features(cpu, compiler, ctx):
                     ),
                 ],
             ),
+            feature(name = "parse_showincludes", enabled = True),
             feature(name = "no_stripping", enabled = True),
             feature(
                 name = "targets_windows",
