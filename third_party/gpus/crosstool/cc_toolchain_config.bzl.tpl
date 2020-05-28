@@ -266,6 +266,18 @@ def _tool_paths(cpu, ctx):
     else:
         fail("Unreachable")
 
+def _as_needed_group(cpu):
+    if cpu == "local":
+        return [flag_group(flags = ["-Wl,-no-as-needed"])]
+    else:
+        return []
+
+def _rpath_flag(cpu):
+    if cpu == "local":
+        return "-Wl,-rpath,$ORIGIN/%{runtime_library_search_directories}"
+    else:
+        return "-Wl,-rpath,@loader_path/%{runtime_library_search_directories}"
+
 def _sysroot_group():
     return flag_group(
         flags = ["--sysroot=%{sysroot}"],
@@ -281,14 +293,14 @@ def _no_canonical_prefixes_group(extra_flags):
 
 def _cuda_set(cuda_path, actions):
     if cuda_path:
-        return flag_set(
+        return [flag_set(
             actions = actions,
             flag_groups = [
                 flag_group(
                     flags = ["--cuda-path=" + cuda_path],
                 ),
             ],
-        )
+        )]
     else:
         return []
 
@@ -304,7 +316,7 @@ def _features(cpu, compiler, ctx):
                 enabled = True,
                 flag_sets = [
                     flag_set(
-                        actions = all_compile_actions(),
+                        actions = all_preprocessed_actions(),
                         flag_groups = [
                             flag_group(
                                 flags = ["-MD", "-MF", "%{dependency_file}"],
@@ -314,11 +326,14 @@ def _features(cpu, compiler, ctx):
                                 flags = ["-gsplit-dwarf"],
                                 expand_if_available = "per_object_debug_info_file",
                             ),
-                        ],
-                    ),
-                    flag_set(
-                        actions = all_preprocessed_actions(),
-                        flag_groups = [
+                            flag_group(
+                                flags = ["-fPIC"],
+                                expand_if_available = "pic",
+                            ),
+                            flag_group(
+                                flags = ["-fPIE"],
+                                expand_if_not_available = "pic",
+                            ),
                             flag_group(
                                 flags = ["-frandom-seed=%{output_file}"],
                                 expand_if_available = "output_file",
@@ -347,42 +362,20 @@ def _features(cpu, compiler, ctx):
                                 flags = ["-F", "%{framework_include_paths}"],
                                 iterate_over = "framework_include_paths",
                             ),
-                        ],
-                    ),
-                    flag_set(
-                        actions = all_cpp_compile_actions(),
-                        flag_groups = [
-                            flag_group(flags = ["-fexperimental-new-pass-manager"]),
-                        ] if compiler == "clang" else [],
-                    ),
-                    flag_set(
-                        actions = all_compile_actions(),
-                        flag_groups = [
                             flag_group(
                                 flags = [
                                     "-Wno-builtin-macro-redefined",
                                     "-D__DATE__=\"redacted\"",
                                     "-D__TIMESTAMP__=\"redacted\"",
                                     "-D__TIME__=\"redacted\"",
-                                ],
-                            ),
-                            flag_group(
-                                flags = ["-fPIC"],
-                                expand_if_available = "pic",
-                            ),
-                            flag_group(
-                                flags = ["-fPIE"],
-                                expand_if_not_available = "pic",
-                            ),
-                            flag_group(
-                                flags = [
                                     "-U_FORTIFY_SOURCE",
                                     "-D_FORTIFY_SOURCE=1",
                                     "-fstack-protector",
                                     "-Wall",
-                                ] + ctx.attr.host_compiler_warnings + [
                                     "-fno-omit-frame-pointer",
-                                ],
+                                ] + ctx.attr.host_compiler_warnings + (
+                                    ["-fexperimental-new-pass-manager"] if compiler == "clang" else []
+                                ),
                             ),
                             _no_canonical_prefixes_group(
                                 ctx.attr.extra_no_canonical_prefixes_flags,
@@ -415,7 +408,7 @@ def _features(cpu, compiler, ctx):
                     ),
                 ] + _cuda_set(
                     ctx.attr.cuda_path,
-                    all_compile_actions,
+                    all_compile_actions(),
                 ) + [
                     flag_set(
                         actions = all_compile_actions(),
@@ -495,13 +488,15 @@ def _features(cpu, compiler, ctx):
                         flag_groups = [flag_group(flags = ["-shared"])],
                     ),
                     flag_set(
+                        actions = all_executable_link_actions(),
+                        flag_groups = [flag_group(flags = ["-pie"])],
+                    ),
+                    flag_set(
                         actions = all_link_actions(),
-                        flag_groups = [
-                            flag_group(flags = (
-                                ["-Wl,-no-as-needed"] if cpu == "local" else []
-                            ) + [
-                                "-B" + ctx.attr.linker_bin_path,
-                            ]),
+                        flag_groups = (
+                            _as_needed_group(cpu)
+                        ) + [
+                            _sysroot_group(),
                             flag_group(
                                 flags = ["@%{linker_param_file}"],
                                 expand_if_available = "linker_param_file",
@@ -520,13 +515,11 @@ def _features(cpu, compiler, ctx):
                             ),
                             _iterate_flag_group(
                                 iterate_over = "runtime_library_search_directories",
-                                flags = [
-                                    "-Wl,-rpath,$ORIGIN/%{runtime_library_search_directories}",
-                                ] if cpu == "local" else [
-                                    "-Wl,-rpath,@loader_path/%{runtime_library_search_directories}",
-                                ],
+                                flags = [_rpath_flag(cpu)],
                             ),
-                            _libraries_to_link_group("darwin" if cpu == "darwin" else "linux"),
+                            _libraries_to_link_group(
+                                "darwin" if cpu == "darwin" else "linux",
+                            ),
                             _iterate_flag_group(
                                 flags = ["%{user_link_flags}"],
                                 iterate_over = "user_link_flags",
@@ -539,49 +532,39 @@ def _features(cpu, compiler, ctx):
                                 flags = ["-Wl,-S"],
                                 expand_if_available = "strip_debug_symbols",
                             ),
-                            flag_group(flags = ["-lc++" if cpu == "darwin" else "-lstdc++"]),
+                            flag_group(flags = [
+                                "-lc++" if cpu == "darwin" else "-lstdc++",
+                            ]),
                             _no_canonical_prefixes_group(
                                 ctx.attr.extra_no_canonical_prefixes_flags,
                             ),
+                            flag_group(flags = ["-B" + ctx.attr.linker_bin_path]),
                         ],
                     ),
+                ] + _cuda_set(
+                    ctx.attr.cuda_path,
+                    all_link_actions(),
+                ) + ([
                     flag_set(
-                        actions = all_executable_link_actions(),
-                        flag_groups = [flag_group(flags = ["-pie"])],
+                        actions = all_link_actions(),
+                        flag_groups = [
+                            flag_group(flags = [
+                                "-Wl,-z,relro,-z,now",
+                                "-Wl,--gc-sections",
+                                "-Wl,--build-id=md5",
+                                "-Wl,--hash-style=gnu",
+                            ]),
+                        ],
                     ),
-                ] + ([
+                ] if cpu == "local" else []) + ([
                     flag_set(
                         actions = all_link_actions(),
                         flag_groups = [flag_group(flags = [
-                            "-Wl,-z,relro,-z,now",
+                            "-undefined",
+                            "dynamic_lookup",
                         ])],
                     ),
-                ] if cpu == "local" else []) + ([
-                    flag_set(
-                        actions = all_link_actions(),
-                        flag_groups = [
-                            flag_group(flags = ["-Wl,--gc-sections"]),
-                            flag_group(
-                                flags = ["-Wl,--build-id=md5", "-Wl,--hash-style=gnu"],
-                            ),
-                        ],
-                    ),
-                ] if cpu == "local" else []) + ([
-                    flag_set(
-                        actions = all_link_actions(),
-                        flag_groups = [flag_group(flags = ["-undefined", "dynamic_lookup"])],
-                    ),
-                ] if cpu == "darwin" else []) + _cuda_set(
-                    ctx.attr.cuda_path,
-                    all_link_actions(),
-                ) + [
-                    flag_set(
-                        actions = all_link_actions(),
-                        flag_groups = [
-                            _sysroot_group(),
-                        ],
-                    ),
-                ],
+                ] if cpu == "darwin" else []),
             ),
             feature(name = "opt"),
             feature(name = "fastbuild"),
